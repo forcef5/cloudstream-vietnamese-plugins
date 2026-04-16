@@ -1,0 +1,8 @@
+# Cloudstream 3 VN Plugins
+*.cs3
+/build/
+**/build/
+.gradle/
+local.properties
+*.iml
+.idea/

@@ -1,0 +1,44 @@
+[
+    {
+        "iconUrl": "https://thuvienhd.top/wp-content/uploads/2020/04/cropped-favicon-1-192x192.png",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/forcef5/cloudstream-vietnamese-plugins",
+        "fileSize": 0,
+        "status": 1,
+        "authors": ["cloudstreamvn"],
+        "tvTypes": ["Movie", "TvSeries"],
+        "version": 1,
+        "internalName": "ThuVienHDProvider",
+        "description": "Kho phim ThuVienHD.TOP - Phim lẻ, Phim bộ Full HD link Fshare",
+        "url": "https://raw.githubusercontent.com/forcef5/cloudstream-vietnamese-plugins/builds/ThuVienHDProvider.cs3",
+        "name": "ThuVienHD"
+    },
+    {
+        "iconUrl": "https://thuviencine.com/wp-content/uploads/2023/01/cropped-cinetv-192x192.png",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/forcef5/cloudstream-vietnamese-plugins",
+        "fileSize": 0,
+        "status": 1,
+        "authors": ["cloudstreamvn"],
+        "tvTypes": ["Movie", "TvSeries"],
+        "version": 1,
+        "internalName": "ThuVienCineProvider",
+        "description": "Kho phim ThuVienCine.com - Phim HD 4K Vietsub link Fshare",
+        "url": "https://raw.githubusercontent.com/forcef5/cloudstream-vietnamese-plugins/builds/ThuVienCineProvider.cs3",
+        "name": "ThuVienCine"
+    },
+    {
+        "iconUrl": "https://ssl.gstatic.com/docs/spreadsheets/spreadsheets_2023q4.ico",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/forcef5/cloudstream-vietnamese-plugins",
+        "fileSize": 0,
+        "status": 1,
+        "authors": ["cloudstreamvn"],
+        "tvTypes": ["Movie", "TvSeries"],
+        "version": 1,
+        "internalName": "GoogleSheetProvider",
+        "description": "Nhập kho phim từ Google Sheets - Phim lẻ, Phim bộ link Fshare",
+        "url": "https://raw.githubusercontent.com/forcef5/cloudstream-vietnamese-plugins/builds/GoogleSheetProvider.cs3",
+        "name": "GoogleSheetProvider"
+    }
+]
