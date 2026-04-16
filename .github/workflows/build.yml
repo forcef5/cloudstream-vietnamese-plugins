@@ -27,8 +27,14 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+      - name: Generate Gradle Wrapper
+        run: |
+          # Download and install Gradle to generate the wrapper
+          GRADLE_VERSION=8.9
+          wget -q "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" -O /tmp/gradle.zip
+          unzip -qo /tmp/gradle.zip -d /tmp/
+          /tmp/gradle-${GRADLE_VERSION}/bin/gradle wrapper --gradle-version ${GRADLE_VERSION}
+          chmod +x gradlew
 
       - name: Build plugins
         run: |
@@ -38,31 +44,27 @@ jobs:
 
       - name: Move built files
         run: |
-          # Create builds directory
           mkdir -p builds
-
-          # Find and copy .cs3 files
           find . -name "*.cs3" -exec cp {} builds/ \;
-
           echo "Built files:"
           ls -la builds/
 
-      - name: Push builds to repo
+      - name: Push builds to builds branch
         run: |
-          # Configure git
           git config --local user.email "actions@github.com"
           git config --local user.name "GitHub Actions"
 
-          # Copy builds to root
+          # Create orphan builds branch
+          git checkout --orphan builds
+          git rm -rf .
+
+          # Copy built files
           cp builds/*.cs3 . 2>/dev/null || true
 
-          # Generate plugins.json from built files
-          # (The plugins.json is already in the repo, just update URLs)
-
           # Add and commit
-          git add *.cs3 plugins.json
-          git diff --staged --quiet || git commit -m "Build: Update plugins [skip ci]"
-          git push
+          git add *.cs3
+          git diff --staged --quiet || git commit -m "Build: Update plugins"
+          git push -f origin builds
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
