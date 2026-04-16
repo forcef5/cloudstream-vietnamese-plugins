@@ -85,31 +85,39 @@ class ThuVienCineProvider : MainAPI() {
     override suspend fun load(url: String): LoadResponse? {
         val document = app.get(url).document
 
-        val title = document.selectFirst("h1, div.sheader h1, h1.entry-title")?.text()?.trim()
+        val title = document.selectFirst("h1.entry-title, h1, div.sheader h1")?.text()?.trim()
             ?: return null
-        val poster = document.selectFirst("div.poster img, div.sheader div.poster img, meta[property='og:image']")?.let {
+        val poster = document.selectFirst(".movie-image img, div.poster img, div.sheader div.poster img, meta[property='og:image']")?.let {
             it.attr("content").ifEmpty {
                 it.attr("data-lazy-src").ifEmpty { it.attr("data-src").ifEmpty { it.attr("src") } }
             }
         }
 
-        val descriptionRaw = document.selectFirst("div.wp-content p, div#info div.wp-content, meta[property='og:description']")
+        val descriptionRaw = document.selectFirst(".movie-description .trama, div.wp-content p, div#info div.wp-content, meta[property='og:description']")
         val description = descriptionRaw?.let {
             it.attr("content").ifEmpty { it.text() }
         }?.trim()
 
         val year = document.selectFirst("a[href*='/years/'], span.date, span.year")?.text()?.trim()?.toIntOrNull()
 
-        val tags = document.select("div.sgeneros a, a[rel='tag']").map { it.text().trim() }
+        val tags = document.select("span[itemprop='genre'] a, div.sgeneros a, a[rel='tag']").map { it.text().trim() }
 
-        val director = document.select("a[href*='/director/']")
+        val director = document.select("span[itemprop='director'] a, a[href*='/director/']")
             .joinToString(", ") { it.text().trim() }
 
-        val actors = document.select("a[href*='/actors/']")
+        val actors = document.select("span[itemprop='actors'] a, a[href*='/actors/']")
             .map { ActorData(Actor(it.text().trim())) }
 
-        val recommendations = document.select("div.owl-item article, div.srelac article, .item-container .item").mapNotNull {
-            it.toSearchResult()
+        val recommendations = document.select("section.similar li, div.owl-item article, div.srelac article, .item-container .item").mapNotNull {
+            val a = it.selectFirst("a")
+            val img = it.selectFirst("img")
+            val recTitle = it.attr("title").ifEmpty { img?.attr("alt") }
+            val recUrl = a?.attr("href")
+            val recPoster = img?.attr("data-lazy-src") ?: img?.attr("data-src") ?: img?.attr("src")
+            if (recTitle.isNullOrEmpty() || recUrl.isNullOrEmpty()) null
+            else newTvSeriesSearchResponse(recTitle, recUrl, TvType.TvSeries) {
+                this.posterUrl = recPoster
+            }
         }
 
         // Extract Fshare links
@@ -139,7 +147,9 @@ class ThuVienCineProvider : MainAPI() {
         // Check if TV Series
         val isSeries = url.contains("/tv-series/") ||
                 tags.any { it.contains("Phim Bộ", ignoreCase = true) } ||
-                document.select("div.episodios li, ul.episodios li, div.se-c").isNotEmpty()
+                document.select("div.episodios li, ul.episodios li, div.se-c").isNotEmpty() ||
+                fshareLinks.any { it.contains("/folder/") } ||
+                fshareLinks.size > 1
 
         if (isSeries) {
             val episodes = mutableListOf<Episode>()
@@ -158,7 +168,7 @@ class ThuVienCineProvider : MainAPI() {
                 // Use fshare links as episodes
                 fshareLinks.forEachIndexed { index, link ->
                     episodes.add(newEpisode(link) {
-                        this.name = "Link ${index + 1}"
+                        this.name = if (link.contains("/folder/")) "Thư mục Fshare ${index + 1}" else "Link ${index + 1}"
                         this.episode = index + 1
                     })
                 }
