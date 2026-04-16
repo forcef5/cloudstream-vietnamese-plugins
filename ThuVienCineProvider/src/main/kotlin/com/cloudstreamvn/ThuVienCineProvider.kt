@@ -148,16 +148,18 @@ class ThuVienCineProvider : MainAPI() {
                 episodeElements.forEachIndexed { index, ep ->
                     val epTitle = ep.selectFirst("a")?.text()?.trim() ?: "Tập ${index + 1}"
                     val epLink = ep.selectFirst("a")?.attr("href") ?: url
-                    episodes.add(Episode(epLink, epTitle, episode = index + 1))
+                    episodes.add(newEpisode(epLink) {
+                        this.name = epTitle
+                        this.episode = index + 1
+                    })
                 }
             } else {
                 // Use fshare links as episodes
                 fshareLinks.forEachIndexed { index, link ->
-                    episodes.add(Episode(
-                        data = link,
-                        name = "Link ${index + 1}",
-                        episode = index + 1
-                    ))
+                    episodes.add(newEpisode(link) {
+                        this.name = "Link ${index + 1}"
+                        this.episode = index + 1
+                    })
                 }
             }
 
@@ -235,7 +237,7 @@ class ThuVienCineProvider : MainAPI() {
                         val fileName = jsonResponse.Name ?: "Video ${index + 1}"
 
                         if (videoUrl.isNotEmpty()) {
-                            val quality = when {
+                            val qualityVal = when {
                                 fileName.contains("2160p", ignoreCase = true) || fileName.contains("4K", ignoreCase = true) -> Qualities.P2160.value
                                 fileName.contains("1080p", ignoreCase = true) -> Qualities.P1080.value
                                 fileName.contains("720p", ignoreCase = true) -> Qualities.P720.value
@@ -248,10 +250,11 @@ class ThuVienCineProvider : MainAPI() {
                                     source = this.name,
                                     name = "$name - $fileName",
                                     url = videoUrl,
-                                    referer = mainUrl,
-                                    quality = quality,
-                                    isM3u8 = videoUrl.contains(".m3u8")
-                                )
+                                    type = ExtractorLinkType.VIDEO
+                                ) {
+                                    this.referer = mainUrl
+                                    this.quality = qualityVal
+                                }
                             )
                         }
                     } catch (_: Exception) {}

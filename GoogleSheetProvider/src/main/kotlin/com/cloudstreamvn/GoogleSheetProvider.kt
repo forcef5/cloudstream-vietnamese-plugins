@@ -90,11 +90,10 @@ class GoogleSheetProvider : MainAPI() {
         if (isSeries) {
             // For folders, create a single episode pointing to the folder
             val episodes = listOf(
-                Episode(
-                    data = fshareUrl,
-                    name = title,
-                    episode = 1
-                )
+                newEpisode(fshareUrl) {
+                    this.name = title
+                    this.episode = 1
+                }
             )
 
             return newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
@@ -132,7 +131,7 @@ class GoogleSheetProvider : MainAPI() {
                 val fileName = jsonResponse.Name ?: "Video"
 
                 if (videoUrl.isNotEmpty()) {
-                    val quality = when {
+                    val qualityVal = when {
                         fileName.contains("2160p", ignoreCase = true) || fileName.contains("4K", ignoreCase = true) -> Qualities.P2160.value
                         fileName.contains("1080p", ignoreCase = true) -> Qualities.P1080.value
                         fileName.contains("720p", ignoreCase = true) -> Qualities.P720.value
@@ -145,10 +144,11 @@ class GoogleSheetProvider : MainAPI() {
                             source = this.name,
                             name = "$name - $fileName",
                             url = videoUrl,
-                            referer = "",
-                            quality = quality,
-                            isM3u8 = videoUrl.contains(".m3u8")
-                        )
+                            type = ExtractorLinkType.VIDEO
+                        ) {
+                            this.referer = ""
+                            this.quality = qualityVal
+                        }
                     )
                     return true
                 }
