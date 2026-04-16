@@ -24,21 +24,17 @@ jobs:
           distribution: "adopt"
           java-version: 17
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-
-      - name: Generate Gradle Wrapper
+      - name: Setup Gradle 8.9
         run: |
-          # Download and install Gradle to generate the wrapper
           GRADLE_VERSION=8.9
           wget -q "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" -O /tmp/gradle.zip
-          unzip -qo /tmp/gradle.zip -d /tmp/
-          /tmp/gradle-${GRADLE_VERSION}/bin/gradle wrapper --gradle-version ${GRADLE_VERSION}
-          chmod +x gradlew
+          sudo unzip -qo /tmp/gradle.zip -d /opt/
+          sudo ln -sf "/opt/gradle-${GRADLE_VERSION}/bin/gradle" /usr/local/bin/gradle
+          gradle --version
 
       - name: Build plugins
         run: |
-          ./gradlew ThuVienHDProvider:make ThuVienCineProvider:make GoogleSheetProvider:make
+          gradle ThuVienHDProvider:make ThuVienCineProvider:make GoogleSheetProvider:make --no-daemon --stacktrace
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
 
@@ -54,17 +50,20 @@ jobs:
           git config --local user.email "actions@github.com"
           git config --local user.name "GitHub Actions"
 
+          # Save built files
+          cp -r builds /tmp/builds
+
           # Create orphan builds branch
           git checkout --orphan builds
           git rm -rf .
 
-          # Copy built files
-          cp builds/*.cs3 . 2>/dev/null || true
+          # Copy built files back
+          cp /tmp/builds/*.cs3 . 2>/dev/null || true
 
           # Add and commit
-          git add *.cs3
+          git add *.cs3 2>/dev/null || true
           git diff --staged --quiet || git commit -m "Build: Update plugins"
-          git push -f origin builds
+          git push -f origin builds || true
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
