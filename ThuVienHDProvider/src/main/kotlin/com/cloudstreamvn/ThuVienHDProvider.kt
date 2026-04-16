@@ -268,7 +268,7 @@ class ThuVienHDProvider : MainAPI() {
             "sd", "720p" -> SearchQuality.SD
             "cam" -> SearchQuality.Cam
             "camrip" -> SearchQuality.CamRip
-            "hdrip" -> SearchQuality.HdRip
+            "hdrip" -> SearchQuality.HD
             "dvd" -> SearchQuality.DVD
             "bluray" -> SearchQuality.BlueRay
             else -> null
