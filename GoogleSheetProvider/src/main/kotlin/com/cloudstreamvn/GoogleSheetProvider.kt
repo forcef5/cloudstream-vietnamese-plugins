@@ -133,15 +133,15 @@ class GoogleSheetProvider : MainAPI() {
 
                 if (videoUrl.isNotEmpty()) {
                     val quality = when {
-                        fileName.contains("2160p", ignoreCase = true) || fileName.contains("4K", ignoreCase = true) -> Qualities.Q2160p.value
-                        fileName.contains("1080p", ignoreCase = true) -> Qualities.Q1080p.value
-                        fileName.contains("720p", ignoreCase = true) -> Qualities.Q720p.value
-                        fileName.contains("480p", ignoreCase = true) -> Qualities.Q480p.value
+                        fileName.contains("2160p", ignoreCase = true) || fileName.contains("4K", ignoreCase = true) -> Qualities.P2160.value
+                        fileName.contains("1080p", ignoreCase = true) -> Qualities.P1080.value
+                        fileName.contains("720p", ignoreCase = true) -> Qualities.P720.value
+                        fileName.contains("480p", ignoreCase = true) -> Qualities.P480.value
                         else -> Qualities.Unknown.value
                     }
 
                     callback.invoke(
-                        ExtractorLink(
+                        newExtractorLink(
                             source = this.name,
                             name = "$name - $fileName",
                             url = videoUrl,
