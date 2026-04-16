@@ -36,7 +36,7 @@ class ThuVienCineProvider : MainAPI() {
         val url = request.data + page
         val document = app.get(url).document
 
-        val home = document.select("div.items article, div.result-item article, div#archive-content article").mapNotNull {
+        val home = document.select("div.item, div.items article, div.result-item article, div#archive-content article").mapNotNull {
             it.toSearchResult()
         }
 
@@ -50,16 +50,17 @@ class ThuVienCineProvider : MainAPI() {
     }
 
     private fun Element.toSearchResult(): SearchResponse? {
-        val title = this.selectFirst("div.data h3 a, h3 a, div.data a")?.text()?.trim() ?: return null
-        val href = this.selectFirst("div.data h3 a, h3 a, div.data a")?.attr("href") ?: return null
+        val aTag = this.selectFirst("a")
+        val title = aTag?.attr("title") ?: this.selectFirst(".movie-title")?.text()?.trim() ?: this.selectFirst("div.data h3 a, h3 a, div.data a")?.text()?.trim() ?: return null
+        val href = aTag?.attr("href") ?: this.selectFirst("div.data h3 a, h3 a, div.data a")?.attr("href") ?: return null
         val posterUrl = this.selectFirst("div.poster img, img")?.let {
             it.attr("data-lazy-src").ifEmpty { it.attr("data-src").ifEmpty { it.attr("src") } }
         }
-        val year = this.selectFirst("span.year, div.data span")?.text()?.trim()?.toIntOrNull()
-        val quality = this.selectFirst("span.quality")?.text()?.trim()
+        val year = this.selectFirst("span.year, div.data span, span.movie-date")?.text()?.trim()?.toIntOrNull()
+        val quality = this.selectFirst("span.quality, span.item-quality")?.text()?.trim()
 
         // Determine type based on URL
-        val type = if (href.contains("/tv-series/") || href.contains("-season-") || href.contains("-phan-")) {
+        val type = if (this.selectFirst("span.item-tv") != null || href.contains("/tv-series/") || href.contains("-season-") || href.contains("-phan-")) {
             TvType.TvSeries
         } else {
             TvType.Movie
@@ -76,7 +77,7 @@ class ThuVienCineProvider : MainAPI() {
         val url = "$mainUrl/?s=$query"
         val document = app.get(url).document
 
-        return document.select("div.result-item article, div.items article, div#archive-content article").mapNotNull {
+        return document.select("div.item, div.result-item article, div.items article, div#archive-content article").mapNotNull {
             it.toSearchResult()
         }
     }
@@ -107,7 +108,7 @@ class ThuVienCineProvider : MainAPI() {
         val actors = document.select("a[href*='/actors/']")
             .map { ActorData(Actor(it.text().trim())) }
 
-        val recommendations = document.select("div.owl-item article, div.srelac article").mapNotNull {
+        val recommendations = document.select("div.owl-item article, div.srelac article, .item-container .item").mapNotNull {
             it.toSearchResult()
         }
 
