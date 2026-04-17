@@ -5,6 +5,9 @@ import com.lagradost.cloudstream3.utils.*
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import java.io.StringReader
 import java.io.BufferedReader
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.Locale
 
 class GoogleSheetProvider : MainAPI() {
     override var mainUrl = "https://docs.google.com/spreadsheets/d/1DZAw3-cSn1FFIZA17_6ZjdtdLqI8J3xFf0FogTab4lg"
@@ -19,6 +22,17 @@ class GoogleSheetProvider : MainAPI() {
 
     // Fshare getlink API
     private val fshareGetlinkApi = "http://fspoint.shop:8308/getlink"
+    private val fshareLoginApi = "https://api.fshare.vn/api/user/login"
+    private val fshareFolderApi = "https://api.fshare.vn/api/fileops/getFolderList"
+    private val fshareUserAgent = "kodivietmediaf-K58W6U"
+    private val fshareAppKey = "dMnqMMZMUnN5YpvKENaEhdQQ5jxDqddt"
+    private val fshareEmail = "toh88214@gmail.com"
+    private val fsharePassword = "rKs3FeKdyeCHUD1988"
+
+    private var fshareToken: String? = null
+    private var fshareSessionId: String? = null
+    private var fshareAuthTimeMs: Long = 0L
+    private val fshareAuthCacheMs = 30 * 60 * 1000L
 
     // Google Sheet ID - can be changed
     private val sheetId = "1DZAw3-cSn1FFIZA17_6ZjdtdLqI8J3xFf0FogTab4lg"
@@ -88,13 +102,21 @@ class GoogleSheetProvider : MainAPI() {
         val isSeries = fshareUrl.contains("/folder/")
 
         if (isSeries) {
-            // For folders, create a single episode pointing to the folder
-            val episodes = listOf(
-                newEpisode(fshareUrl) {
-                    this.name = title
-                    this.episode = 1
+            val episodes = fetchFshareFolderFiles(fshareUrl).mapIndexed { index, item ->
+                val fileUrl = "https://www.fshare.vn/file/${item.linkcode}"
+                val displayName = "${item.name} | ${item.sizeStr}"
+                newEpisode(fileUrl) {
+                    this.name = displayName
+                    this.episode = index + 1
                 }
-            )
+            }.ifEmpty {
+                listOf(
+                    newEpisode(fshareUrl) {
+                        this.name = title
+                        this.episode = 1
+                    }
+                )
+            }
 
             return newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
                 this.posterUrl = poster
@@ -258,6 +280,136 @@ class GoogleSheetProvider : MainAPI() {
         return fields
     }
 
+    private suspend fun fetchFshareFolderFiles(folderUrl: String): List<FshareFolderFile> {
+        val auth = ensureFshareAuth() ?: return emptyList()
+        val payload = """
+            {
+              "token":"${escapeJson(auth.token)}",
+              "url":"${escapeJson(folderUrl)}",
+              "dirOnly":0,
+              "pageIndex":0,
+              "limit":10000
+            }
+        """.trimIndent()
+
+        val response = postJson(
+            url = fshareFolderApi,
+            body = payload,
+            headers = mapOf(
+                "Content-Type" to "application/json",
+                "User-Agent" to fshareUserAgent,
+                "Cookie" to "session_id=${auth.sessionId}"
+            )
+        ) ?: return emptyList()
+
+        return try {
+            val items = parseJson<List<FshareFolderApiItem>>(response)
+            items.mapNotNull { item ->
+                val type = item.type?.toString()?.trim()
+                val linkcode = item.linkcode?.trim().orEmpty()
+                if (type == "0" || linkcode.isBlank()) return@mapNotNull null
+
+                val size = item.size?.toLongOrNull() ?: 0L
+                FshareFolderFile(
+                    name = item.name?.trim().orEmpty().ifBlank { linkcode },
+                    linkcode = linkcode,
+                    size = size,
+                    sizeStr = formatBytes(size)
+                )
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private suspend fun ensureFshareAuth(): FshareAuth? {
+        val now = System.currentTimeMillis()
+        val cachedToken = fshareToken
+        val cachedSession = fshareSessionId
+        if (cachedToken != null && cachedSession != null && now - fshareAuthTimeMs < fshareAuthCacheMs) {
+            return FshareAuth(cachedToken, cachedSession)
+        }
+
+        val payload = """
+            {
+              "app_key":"${escapeJson(fshareAppKey)}",
+              "user_email":"${escapeJson(fshareEmail)}",
+              "password":"${escapeJson(fsharePassword)}"
+            }
+        """.trimIndent()
+
+        val response = postJson(
+            url = fshareLoginApi,
+            body = payload,
+            headers = mapOf(
+                "Content-Type" to "application/json",
+                "User-Agent" to fshareUserAgent
+            )
+        ) ?: return null
+
+        return try {
+            val login = parseJson<FshareLoginResponse>(response)
+            val token = login.token?.trim().orEmpty()
+            val sessionId = login.session_id?.trim().orEmpty()
+            if (token.isBlank() || sessionId.isBlank()) return null
+
+            fshareToken = token
+            fshareSessionId = sessionId
+            fshareAuthTimeMs = now
+            FshareAuth(token, sessionId)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun postJson(url: String, body: String, headers: Map<String, String>): String? {
+        var connection: HttpURLConnection? = null
+        return try {
+            connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = 20000
+                readTimeout = 30000
+                doOutput = true
+                headers.forEach { (k, v) -> setRequestProperty(k, v) }
+            }
+            connection.outputStream.use { output ->
+                output.write(body.toByteArray(Charsets.UTF_8))
+            }
+            val stream = if (connection.responseCode in 200..299) {
+                connection.inputStream
+            } else {
+                connection.errorStream
+            } ?: return null
+            stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+        } catch (_: Exception) {
+            null
+        } finally {
+            connection?.disconnect()
+        }
+    }
+
+    private fun escapeJson(value: String): String {
+        return value
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
+    }
+
+    private fun formatBytes(bytes: Long): String {
+        if (bytes <= 0L) return "0 B"
+        val kb = 1024.0
+        val mb = kb * 1024
+        val gb = mb * 1024
+        return when {
+            bytes >= gb -> String.format(Locale.US, "%.2f GB", bytes / gb)
+            bytes >= mb -> String.format(Locale.US, "%.2f MB", bytes / mb)
+            bytes >= kb -> String.format(Locale.US, "%.2f KB", bytes / kb)
+            else -> "$bytes B"
+        }
+    }
+
     /**
      * Remove BBCode formatting from title
      * Example: "Tiệc Ăn Chơi Đẫm Máu 2 [B][COLOR yellow]{Sub Việt Mux Sẵn}[/COLOR][/B] Slumber Party Massacre II 1987"
@@ -318,5 +470,29 @@ class GoogleSheetProvider : MainAPI() {
     data class FshareResponse(
         val URL: String = "",
         val Name: String? = null
+    )
+
+    data class FshareLoginResponse(
+        val token: String? = null,
+        val session_id: String? = null
+    )
+
+    data class FshareFolderApiItem(
+        val name: String? = null,
+        val linkcode: String? = null,
+        val size: String? = null,
+        val type: Any? = null
+    )
+
+    data class FshareFolderFile(
+        val name: String,
+        val linkcode: String,
+        val size: Long,
+        val sizeStr: String
+    )
+
+    data class FshareAuth(
+        val token: String,
+        val sessionId: String
     )
 }
