@@ -31,10 +31,11 @@ UPLOAD_API = 'https://api.fshare.vn/api/session/upload'
 USER_AGENT = 'kodivietmediaf-K58W6U'
 APP_KEY = 'dMnqMMZMUnN5YpvKENaEhdQQ5jxDqddt'
 
+
 # File để lưu token và session ID
 SESSION_FILE = 'fshare_session.json'
-DEFAULT_EMAIL = "rimvak@vuk.edu.vn"
-DEFAULT_PASSWORD = "tyfsPRVZIx545QJfIMO_1762701271"
+DEFAULT_EMAIL = "toh88214@gmail.com"
+DEFAULT_PASSWORD = "rKs3FeKdyeCHUD1988"
 DEFAULT_DOMAIN = "@fshare.vn"
 
 
@@ -1039,6 +1040,89 @@ class FshareAPI:
             "total_files": len(files),
             "success_count": success_count,
             "error_count": error_count
+        }
+
+    def build_cloudstream_play_items(
+        self,
+        fshare_url: str,
+        recursive: bool = False,
+        max_depth: int = 100,
+        getlink_base: str = "http://fspoint.shop:8308/getlink?id="
+    ) -> Dict[str, Any]:
+        """
+        Build danh sách item phát cho Cloudstream từ link Fshare.
+
+        - Nếu là link folder: lấy toàn bộ file trong folder (có thể đệ quy).
+        - Nếu là link file: trả về 1 item tương ứng.
+        - Mỗi item có display_name: "File name | File size"
+        - Mỗi item có play_url: "<getlink_base><linkcode>"
+        """
+        if not fshare_url or "fshare.vn" not in fshare_url:
+            return {
+                "status": "error",
+                "message": "URL không hợp lệ. Vui lòng dùng link Fshare."
+            }
+
+        normalized_base = getlink_base.rstrip("?&")
+        if "?" not in normalized_base:
+            normalized_base = f"{normalized_base}?id="
+        elif not normalized_base.endswith("id="):
+            normalized_base = f"{normalized_base}&id="
+
+        files: List[Dict[str, Any]] = []
+
+        # Link folder -> lấy danh sách file trong folder
+        if "/folder/" in fshare_url:
+            folder_result = self.get_all_files_from_folder(
+                folder_url=fshare_url,
+                recursive=recursive,
+                max_depth=max_depth
+            )
+            if folder_result.get("status") != "success":
+                return folder_result
+            files = folder_result.get("files", [])
+        # Link file -> build 1 item duy nhất
+        elif "/file/" in fshare_url:
+            linkcode = fshare_url.rstrip("/").split("/")[-1]
+            files = [{
+                "name": linkcode,
+                "linkcode": linkcode,
+                "url": fshare_url,
+                "size": 0,
+                "size_str": "0 B",
+                "is_folder": False
+            }]
+        else:
+            return {
+                "status": "error",
+                "message": "URL không hợp lệ. Chỉ hỗ trợ link /folder/ hoặc /file/ của Fshare."
+            }
+
+        play_items = []
+        for file_item in files:
+            linkcode = file_item.get("linkcode", "")
+            if not linkcode:
+                continue
+
+            file_name = file_item.get("name", linkcode)
+            size_str = file_item.get("size_str", "0 B")
+            display_name = f"{file_name} | {size_str}"
+
+            play_items.append({
+                "display_name": display_name,
+                "file_name": file_name,
+                "file_size": file_item.get("size", 0),
+                "file_size_str": size_str,
+                "linkcode": linkcode,
+                "fshare_url": file_item.get("url", f"https://www.fshare.vn/file/{linkcode}"),
+                "play_url": f"{normalized_base}{linkcode}"
+            })
+
+        return {
+            "status": "success",
+            "source_url": fshare_url,
+            "total_items": len(play_items),
+            "items": play_items
         }
     
     def get_otp_from_api(self, account_id: str) -> Dict[str, Any]:
@@ -2518,6 +2602,22 @@ def handle_cli_commands(args: argparse.Namespace) -> None:
                 print(f"❌ Lỗi: {result.get('message', 'Không rõ lỗi')}")
                 sys.exit(1)
 
+    elif args.command == "cloudstream-list":
+        result = fshare.build_cloudstream_play_items(
+            fshare_url=args.url,
+            recursive=args.recursive,
+            max_depth=args.max_depth,
+            getlink_base=args.getlink_base
+        )
+        if result.get("status") != "success":
+            print(f"❌ Lỗi: {result.get('message', 'Không rõ lỗi')}")
+            sys.exit(1)
+
+        items = result.get("items", [])
+        print(f"✅ Tổng số item: {len(items)}")
+        for item in items:
+            print(f"{item['display_name']} -> {item['play_url']}")
+
 
 def build_arg_parser() -> argparse.ArgumentParser:
     """Tạo parser cho CLI."""
@@ -2550,6 +2650,20 @@ def build_arg_parser() -> argparse.ArgumentParser:
     folder_parser.add_argument("--limit", type=int, default=10000, help="Số item tối đa (mặc định 10000)")
     folder_parser.add_argument("--recursive", action="store_true", help="Đệ quy vào folder con")
     folder_parser.add_argument("--max-depth", type=int, default=100, help="Độ sâu tối đa khi đệ quy")
+
+    # Lệnh cloudstream-list
+    cs_parser = subparsers.add_parser(
+        "cloudstream-list",
+        help="Tạo danh sách phát Cloudstream từ link Fshare folder/file"
+    )
+    cs_parser.add_argument("--url", required=True, help="URL Fshare folder hoặc file")
+    cs_parser.add_argument(
+        "--getlink-base",
+        default="http://fspoint.shop:8308/getlink?id=",
+        help="Base URL getlink (mặc định: http://fspoint.shop:8308/getlink?id=)"
+    )
+    cs_parser.add_argument("--recursive", action="store_true", help="Đệ quy folder con khi URL là folder")
+    cs_parser.add_argument("--max-depth", type=int, default=100, help="Độ sâu tối đa khi đệ quy")
     
     return parser
 
@@ -2559,7 +2673,7 @@ def main():
     # Quick mode:
     # - python fshare_api3.py <file_path> <folder_dest>
     # - python fshare_api3.py <file_path>           (dest mặc định "/")
-    if len(sys.argv) in (2, 3) and not any(arg in ["upload", "folder"] for arg in sys.argv):
+    if len(sys.argv) in (2, 3) and not any(arg in ["upload", "folder", "cloudstream-list"] for arg in sys.argv):
         file_path = sys.argv[1]
         dest_path = sys.argv[2] if len(sys.argv) == 3 else "/"
         print(f"🚀 Quick upload: {file_path} -> {dest_path}")
@@ -2585,7 +2699,7 @@ def main():
         return
 
     # Nếu không có tham số subcommand, vẫn giữ chế độ tương tác cũ
-    if len(sys.argv) > 1 and any(arg in ["upload", "folder"] for arg in sys.argv):
+    if len(sys.argv) > 1 and any(arg in ["upload", "folder", "cloudstream-list"] for arg in sys.argv):
         parser = build_arg_parser()
         args = parser.parse_args()
         handle_cli_commands(args)
